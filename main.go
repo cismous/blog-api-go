@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
+	"strconv"
 )
 
 const VERSION string = "v1"
@@ -30,6 +31,14 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlerArticles(w http.ResponseWriter, r *http.Request) {
+	var page, pageSize int
+	vars := mux.Vars(r)
+	page, _ = strconv.Atoi(vars["page"])
+	pageSize, _ = strconv.Atoi(vars["pageSize"])
+	begin := (page - 1) * pageSize
+	fmt.Println(begin)
+	fmt.Println(pageSize)
+
 	w.Header().Set("Content-Type", "application/json")
 
 	// Open database connection
@@ -40,7 +49,8 @@ func handlerArticles(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 
 	// Execute the query
-	rows, err := db.Query("SELECT id,title,slug,content,created,modified FROM articles")
+	stmt, err := db.Prepare("SELECT id,title,slug,content,created,modified FROM articles ORDER BY created DESC LIMIT ?,?")
+	rows, err := stmt.Query(begin, pageSize)
 	if err != nil {
 		panic(err.Error()) // proper error handling instead of panic in your app
 	}
@@ -79,7 +89,7 @@ func main() {
 	r := mux.NewRouter()
 	s := r.PathPrefix(PREFIX).Subrouter()
 	s.HandleFunc("/", HomeHandler).Methods("GET")
-	s.HandleFunc("/articles", handlerArticles).Methods("GET")
+	s.Path("/articles").HandlerFunc(handlerArticles).Methods("GET").Queries("page", "{page:[1-9][0-9]*}", "pageSize", "{pageSize:[1-9][0-9]*}")
 	s.HandleFunc("/articles", handlerArticleAdd).Methods("POST")
 	s.HandleFunc("/articles/{id}", handlerArticleDetail).Methods("GET")
 	s.HandleFunc("/articles/{id}", handlerArticleDelete).Methods("DELETE")
