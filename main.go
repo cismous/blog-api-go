@@ -24,7 +24,39 @@ type Article struct {
 	Modified int    `json:"modified,omitempty"`
 }
 
-var article []Article
+var articles []Article
+
+func Articles(begin int, pageSize int) (articles []Article, err error) {
+	fmt.Println(begin)
+	fmt.Println(pageSize)
+	// Open database connection
+	db, err := sql.Open("mysql", "root:xing@/blog")
+	if err != nil {
+		panic(err.Error()) // Just for example purpose. You should use proper error handling instead of panic
+	}
+	defer db.Close()
+
+	// Execute the query
+	stmt, err := db.Prepare("SELECT cid,title,slug,text,created,modified FROM articles ORDER BY created DESC LIMIT ?,?")
+	if err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
+	rows, err := stmt.Query(begin, pageSize)
+	if err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
+
+	// Fetch rows
+	for rows.Next() {
+		article := Article{}
+		rows.Scan(&article.ID, &article.Title, &article.Slug, &article.Content, &article.Created, &article.Modified)
+		articles = append(articles, article)
+	}
+	if err = rows.Err(); err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
+	return
+}
 
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "hello, world\n")
@@ -36,37 +68,15 @@ func handlerArticles(w http.ResponseWriter, r *http.Request) {
 	page, _ = strconv.Atoi(vars["page"])
 	pageSize, _ = strconv.Atoi(vars["pageSize"])
 	begin := (page - 1) * pageSize
-	fmt.Println(begin)
-	fmt.Println(pageSize)
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// Open database connection
-	db, err := sql.Open("mysql", "root:xing@/blog")
+	articles, err := Articles(begin, pageSize)
 	if err != nil {
-		panic(err.Error()) // Just for example purpose. You should use proper error handling instead of panic
-	}
-	defer db.Close()
-
-	// Execute the query
-	stmt, err := db.Prepare("SELECT id,title,slug,content,created,modified FROM articles ORDER BY created DESC LIMIT ?,?")
-	rows, err := stmt.Query(begin, pageSize)
-	if err != nil {
-		panic(err.Error()) // proper error handling instead of panic in your app
+		panic(err.Error())
 	}
 
-	// Fetch rows
-	for rows.Next() {
-		var id, created, modified int
-		var title, slug, content string
-		rows.Scan(&id, &title, &slug, &content, &created, &modified)
-		article = append(article, Article{id, title, slug, content, created, modified})
-	}
-	if err = rows.Err(); err != nil {
-		panic(err.Error()) // proper error handling instead of panic in your app
-	}
-
-	json.NewEncoder(w).Encode(article)
+	json.NewEncoder(w).Encode(articles)
 }
 
 func handlerArticleDetail(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +91,8 @@ func handlerArticleDelete(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Delete")
 }
 
-func handlerArticleUpdate(w http.ResponseWriter, r *http.Request) {
+func handlerArticleUpdate(w http.ResponseWriter,
+	r *http.Request) {
 	fmt.Fprintf(w, "Update")
 }
 
